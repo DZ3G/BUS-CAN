@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bus I²C — Le Langage des Puces</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --border: #1e2230;
+    --accent: #00e5ff;
+    --accent2: #ff6b35;
+    --accent3: #7c3aed;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --green: #22d3a0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    overflow-x: hidden;
+    cursor: none;
+  }
+
+  /* Custom cursor */
+  .cursor {
+    position: fixed;
+    width: 12px; height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: transform 0.1s, background 0.2s;
+    mix-blend-mode: screen;
+  }
+  .cursor-ring {
+    position: fixed;
+    width: 36px; height: 36px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9998;
+    transform: translate(-50%, -50%);
+    transition: transform 0.15s ease, width 0.2s, height 0.2s;
+    opacity: 0.5;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* HERO */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 8vw;
+    overflow: hidden;
+    z-index: 1;
+  }
+
+  .hero-eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--accent);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+    animation: fadeUp 0.8s ease both;
+  }
+
+  .hero h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(5rem, 14vw, 14rem);
+    line-height: 0.88;
+    letter-spacing: -0.01em;
+    animation: fadeUp 0.8s 0.1s ease both;
+  }
+
+  .hero h1 .line1 { color: var(--text); }
+  .hero h1 .line2 {
+    color: transparent;
+    -webkit-text-stroke: 1.5px var(--accent);
+    display: block;
+  }
+
+  .hero-desc {
+    max-width: 480px;
+    margin-top: 2.5rem;
+    font-size: 1.1rem;
+    color: var(--muted);
+    line-height: 1.7;
+    font-weight: 300;
+    animation: fadeUp 0.8s 0.2s ease both;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 2rem;
+    padding: 0.5rem 1.2rem;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--green);
+    animation: fadeUp 0.8s 0.3s ease both;
+  }
+  .hero-badge::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+  }
+
+  /* Animated waveform */
+  .waveform {
+    position: absolute;
+    right: -2%;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 55%;
+    opacity: 0.15;
+    animation: fadeUp 1s 0.4s ease both;
+  }
+
+  /* Signal animation */
+  .signal-line {
+    stroke-dasharray: 800;
+    stroke-dashoffset: 800;
+    animation: drawLine 3s ease forwards 0.8s, blink 2s ease-in-out infinite 3.8s;
+  }
+  .signal-line2 {
+    stroke-dasharray: 800;
+    stroke-dashoffset: 800;
+    animation: drawLine 3s ease forwards 1.2s, blink 2s ease-in-out 0.3s infinite 4.2s;
+  }
+
+  @keyframes drawLine {
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* NAV */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 8vw;
+    background: linear-gradient(to bottom, rgba(10,12,16,0.9) 0%, transparent 100%);
+    backdrop-filter: blur(8px);
+  }
+
+  .nav-logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--accent);
+    letter-spacing: 0.2em;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 2.5rem;
+    list-style: none;
+  }
+  .nav-links a {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-decoration: none;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--accent); }
+
+  /* SECTIONS */
+  section {
+    position: relative;
+    z-index: 1;
+    padding: 8rem 8vw;
+  }
+
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--accent);
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .section-label::after {
+    content: '';
+    height: 1px;
+    width: 40px;
+    background: var(--accent);
+  }
+
+  h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(3rem, 6vw, 5.5rem);
+    line-height: 1;
+    margin-bottom: 3rem;
+  }
+
+  /* SPECS GRID */
+  .specs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-top: 4rem;
+  }
+
+  .spec-card {
+    background: var(--surface);
+    padding: 2rem;
+    transition: background 0.2s;
+  }
+  .spec-card:hover { background: #151820; }
+
+  .spec-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3.5rem;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .spec-unit {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+  }
+  .spec-label {
+    margin-top: 0.8rem;
+    font-size: 0.9rem;
+    color: var(--text);
+    font-weight: 500;
+  }
+  .spec-desc {
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* HOW IT WORKS */
+  .steps {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    align-items: start;
+    margin-top: 3rem;
+  }
+
+  .step-list { display: flex; flex-direction: column; gap: 2rem; }
+
+  .step {
+    display: flex;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid transparent;
+    transition: border-color 0.2s, background 0.2s;
+    cursor: default;
+  }
+  .step:hover {
+    border-left-color: var(--accent);
+    background: var(--surface);
+  }
+  .step:nth-child(2):hover { border-left-color: var(--accent2); }
+  .step:nth-child(3):hover { border-left-color: var(--accent3); }
+  .step:nth-child(4):hover { border-left-color: var(--green); }
+
+  .step-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.5rem;
+    color: var(--border);
+    line-height: 1;
+    min-width: 3rem;
+    transition: color 0.2s;
+  }
+  .step:hover .step-num { color: var(--accent); }
+
+  .step-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.05em;
+  }
+  .step-text { font-size: 0.85rem; color: var(--muted); line-height: 1.7; }
+
+  /* Signal diagram */
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2rem;
+    border-radius: 4px;
+  }
+  .diagram-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    margin-bottom: 1.5rem;
+    text-transform: uppercase;
+  }
+  .diagram svg { width: 100%; }
+
+  /* MODES TABLE */
+  .modes-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 2rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+  }
+  .modes-table th {
+    padding: 1rem 1.5rem;
+    text-align: left;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .modes-table td {
+    padding: 1rem 1.5rem;
+    color: var(--muted);
+    border-bottom: 1px solid rgba(30,34,48,0.5);
+  }
+  .modes-table tr:hover td { color: var(--text); background: var(--surface); }
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 2px;
+    font-size: 0.65rem;
+    font-weight: 700;
+  }
+  .badge-std { background: rgba(0,229,255,0.1); color: var(--accent); }
+  .badge-fast { background: rgba(255,107,53,0.1); color: var(--accent2); }
+  .badge-high { background: rgba(124,58,237,0.1); color: var(--accent3); }
+  .badge-ultra { background: rgba(34,211,160,0.1); color: var(--green); }
+
+  /* FRAME ANATOMY */
+  .frame-anatomy {
+    margin-top: 3rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2.5rem;
+  }
+  .frame-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 2rem;
+  }
+  .frame-bits {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+  .frame-bit {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .bit-box {
+    background: var(--border);
+    border: 1px solid rgba(255,255,255,0.05);
+    padding: 0.6rem 0.4rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--muted);
+    text-align: center;
+    transition: all 0.2s;
+    cursor: default;
+    min-width: 2.2rem;
+  }
+  .bit-box:hover { transform: translateY(-3px); }
+  .bit-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.5rem;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .fb-start .bit-box { background: rgba(0,229,255,0.1); border-color: var(--accent); color: var(--accent); }
+  .fb-addr .bit-box { background: rgba(255,107,53,0.1); border-color: var(--accent2); color: var(--accent2); }
+  .fb-rw .bit-box { background: rgba(124,58,237,0.1); border-color: var(--accent3); color: var(--accent3); }
+  .fb-ack .bit-box { background: rgba(34,211,160,0.1); border-color: var(--green); color: var(--green); }
+  .fb-data .bit-box { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); color: var(--text); }
+  .fb-stop .bit-box { background: rgba(0,229,255,0.1); border-color: var(--accent); color: var(--accent); }
+
+  /* APPLICATIONS */
+  .apps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-top: 3rem;
+  }
+  .app-card {
+    background: var(--surface);
+    padding: 2rem 1.5rem;
+    transition: background 0.2s;
+  }
+  .app-card:hover { background: #151820; }
+  .app-icon {
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+  }
+  .app-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text);
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+  }
+  .app-desc { font-size: 0.8rem; color: var(--muted); line-height: 1.6; }
+
+  /* CODE BLOCK */
+  .code-wrap {
+    margin-top: 3rem;
+    background: #080b10;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .code-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.5rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #ff5f57; }
+  .dot-y { background: #febc2e; }
+  .dot-g { background: #28c840; }
+  .code-lang {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-left: auto;
+    letter-spacing: 0.1em;
+  }
+  pre {
+    padding: 2rem;
+    overflow-x: auto;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    line-height: 1.8;
+    color: var(--muted);
+  }
+  .c-kw { color: var(--accent3); }
+  .c-fn { color: var(--accent); }
+  .c-num { color: var(--accent2); }
+  .c-str { color: var(--green); }
+  .c-cm { color: #3d4b5c; font-style: italic; }
+  .c-type { color: #a5b4fc; }
+
+  /* FOOTER */
+  footer {
+    position: relative;
+    z-index: 1;
+    border-top: 1px solid var(--border);
+    padding: 3rem 8vw;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .footer-brand {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.5rem;
+    color: transparent;
+    -webkit-text-stroke: 1px var(--border);
+  }
+  .footer-note {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  /* Divider */
+  .divider {
+    border: none;
+    height: 1px;
+    background: var(--border);
+    margin: 0 8vw;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  /* Scroll reveal */
+  .reveal {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  @media (max-width: 768px) {
+    .steps { grid-template-columns: 1fr; }
+    .waveform { display: none; }
+    nav .nav-links { display: none; }
+    .hero h1 { font-size: 4rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+
+<!-- NAV -->
+<nav>
+  <span class="nav-logo">I²C — Protocole</span>
+  <ul class="nav-links">
+    <li><a href="#overview">Vue d'ensemble</a></li>
+    <li><a href="#how">Fonctionnement</a></li>
+    <li><a href="#modes">Modes de vitesse</a></li>
+    <li><a href="#frame">Format de trame</a></li>
+    <li><a href="#apps">Applications</a></li>
+    <li><a href="#code">Code</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">Protocole de Circuit Inter-Intégré</div>
+  <h1>
+    <span class="line1">Le Bus</span>
+    <span class="line2">I²C</span>
+  </h1>
+  <p class="hero-desc">Un protocole de communication série permettant aux microcontrôleurs de dialoguer avec des dizaines de périphériques via seulement deux fils — une idée révolutionnaire née chez Philips Semiconductors en 1982.</p>
+  <div class="hero-badge">Version du protocole 7.0 · Philips / NXP</div>
+
+  <!-- Animated waveform -->
+  <svg class="waveform" viewBox="0 0 700 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <text x="20" y="55" font-family="monospace" font-size="11" fill="#00e5ff" opacity="0.8">SCL</text>
+    <text x="20" y="175" font-family="monospace" font-size="11" fill="#ff6b35" opacity="0.8">SDA</text>
+    <!-- SCL line -->
+    <polyline class="signal-line"
+      points="55,60 85,60 85,30 115,30 115,60 145,60 145,30 175,30 175,60 205,60 205,30 235,30 235,60 265,60 265,30 295,30 295,60 325,60 325,30 355,30 355,60 385,60 385,30 415,30 415,60 445,60 445,30 475,30 475,60 505,60 505,30 535,30 535,60 565,60 565,30 595,30 595,60 660,60"
+      stroke="#00e5ff" stroke-width="2" fill="none"/>
+    <!-- SDA line (data bits) -->
+    <polyline class="signal-line2"
+      points="55,150 85,150 85,180 115,180 115,150 145,150 145,150 175,150 175,180 205,180 205,150 235,150 235,180 265,180 265,150 295,150 295,180 325,180 325,150 355,150 355,180 385,180 385,150 415,150 415,150 445,150 445,180 475,180 475,150 505,150 505,150 535,150 535,180 565,180 565,150 620,150"
+      stroke="#ff6b35" stroke-width="2" fill="none"/>
+    <!-- Labels -->
+    <text x="80" y="225" font-family="monospace" font-size="9" fill="#3d4b5c">START</text>
+    <text x="165" y="225" font-family="monospace" font-size="9" fill="#3d4b5c">ADDRESS (7-bit)</text>
+    <text x="355" y="225" font-family="monospace" font-size="9" fill="#3d4b5c">R/W</text>
+    <text x="405" y="225" font-family="monospace" font-size="9" fill="#3d4b5c">ACK</text>
+    <text x="450" y="225" font-family="monospace" font-size="9" fill="#3d4b5c">DATA (8-bit)</text>
+    <text x="590" y="225" font-family="monospace" font-size="9" fill="#3d4b5c">STOP</text>
+    <!-- Vertical markers -->
+    <line x1="85" y1="20" x2="85" y2="210" stroke="#1e2230" stroke-width="1" stroke-dasharray="4"/>
+    <line x1="385" y1="20" x2="385" y2="210" stroke="#1e2230" stroke-width="1" stroke-dasharray="4"/>
+    <line x1="415" y1="20" x2="415" y2="210" stroke="#1e2230" stroke-width="1" stroke-dasharray="4"/>
+    <line x1="565" y1="20" x2="565" y2="210" stroke="#1e2230" stroke-width="1" stroke-dasharray="4"/>
+  </svg>
+</section>
+
+<!-- OVERVIEW -->
+<section id="overview">
+  <div class="section-label">Vue d'ensemble</div>
+  <h2>Deux Fils.<br>Des Appareils à l'Infini.</h2>
+
+  <div class="specs-grid reveal">
+    <div class="spec-card">
+      <div class="spec-num">2</div>
+      <div class="spec-unit">FILS</div>
+      <div class="spec-label">SDA + SCL uniquement</div>
+      <div class="spec-desc">La ligne de données série et la ligne d'horloge série — c'est tout ce qu'il faut pour connecter des dizaines d'appareils sur le même bus.</div>
+    </div>
+    <div class="spec-card">
+      <div class="spec-num">127</div>
+      <div class="spec-unit">APPAREILS MAX</div>
+      <div class="spec-label">Adressage sur 7 bits</div>
+      <div class="spec-desc">Jusqu'à 127 adresses uniques sur un seul bus. L'adressage étendu sur 10 bits permet d'atteindre 1023 appareils.</div>
+    </div>
+    <div class="spec-card">
+      <div class="spec-num">5</div>
+      <div class="spec-unit">MBPS MAX</div>
+      <div class="spec-label">Mode Ultra-Rapide+</div>
+      <div class="spec-desc">Du mode standard à 100 kbps jusqu'à 5 Mbps en mode Ultra-Rapide — s'adapte à vos besoins en performance.</div>
+    </div>
+    <div class="spec-card">
+      <div class="spec-num">1982</div>
+      <div class="spec-unit">ANNÉE</div>
+      <div class="spec-label">Né chez Philips</div>
+      <div class="spec-desc">Inventé par Philips Semiconductors (aujourd'hui NXP) pour simplifier la conception de circuits dans l'électronique grand public.</div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="section-label">Protocole</div>
+  <h2>Comment ça Marche</h2>
+
+  <div class="steps reveal">
+    <div class="step-list">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div>
+          <div class="step-title">CONDITION DE DÉPART (START)</div>
+          <p class="step-text">Le maître tire SDA à l'état BAS pendant que SCL est à l'état HAUT. Ce motif unique signale à tous les appareils que la transmission commence.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div>
+          <div class="step-title">ADRESSE + BIT R/W</div>
+          <p class="step-text">Le maître envoie une adresse de 7 bits suivie d'un bit Lecture/Écriture. Chaque esclave écoute et compare avec sa propre adresse.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <div>
+          <div class="step-title">ACQUITTEMENT (ACK)</div>
+          <p class="step-text">L'esclave adressé tire SDA à BAS pendant un cycle d'horloge pour acquitter. Si aucun appareil ne répond, le maître détecte un NACK.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">04</div>
+        <div>
+          <div class="step-title">TRANSFERT DE DONNÉES + STOP</div>
+          <p class="step-text">Les octets de données circulent MSB en premier, chacun suivi d'un ACK. Une condition STOP (SDA HAUT pendant SCL HAUT) clôt la transaction.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagram">
+      <div class="diagram-title">// Chronogramme d'une transaction I²C</div>
+      <svg viewBox="0 0 400 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- SCL -->
+        <text x="10" y="38" font-family="monospace" font-size="9" fill="#00e5ff">SCL</text>
+        <polyline points="40,40 55,40 55,20 75,20 75,40 95,40 95,20 115,20 115,40 135,40 135,20 155,20 155,40 175,40 175,20 195,20 195,40 215,40 215,20 235,20 235,40 255,40 255,20 275,20 275,40 295,40 295,20 315,20 315,40 340,40" stroke="#00e5ff" stroke-width="1.5" fill="none"/>
+        <!-- SDA -->
+        <text x="10" y="108" font-family="monospace" font-size="9" fill="#ff6b35">SDA</text>
+        <polyline points="40,100 55,100 55,120 85,120 85,100 115,100 115,120 145,120 145,100 175,100 175,120 205,120 205,100 235,100 235,100 265,100 265,120 295,120 295,100 315,100 340,100" stroke="#ff6b35" stroke-width="1.5" fill="none"/>
+        <!-- region labels -->
+        <rect x="40" y="140" width="30" height="16" fill="rgba(0,229,255,0.08)" rx="2"/>
+        <text x="43" y="152" font-family="monospace" font-size="7" fill="#00e5ff">S</text>
+        <rect x="75" y="140" width="60" height="16" fill="rgba(255,107,53,0.08)" rx="2"/>
+        <text x="78" y="152" font-family="monospace" font-size="7" fill="#ff6b35">ADDR</text>
+        <rect x="140" y="140" width="25" height="16" fill="rgba(124,58,237,0.08)" rx="2"/>
+        <text x="143" y="152" font-family="monospace" font-size="7" fill="#a5b4fc">R/W</text>
+        <rect x="170" y="140" width="25" height="16" fill="rgba(34,211,160,0.08)" rx="2"/>
+        <text x="173" y="152" font-family="monospace" font-size="7" fill="#22d3a0">ACK</text>
+        <rect x="200" y="140" width="100" height="16" fill="rgba(255,255,255,0.04)" rx="2"/>
+        <text x="225" y="152" font-family="monospace" font-size="7" fill="#64748b">DATA</text>
+        <rect x="305" y="140" width="30" height="16" fill="rgba(0,229,255,0.08)" rx="2"/>
+        <text x="308" y="152" font-family="monospace" font-size="7" fill="#00e5ff">P</text>
+        <!-- Grid lines -->
+        <line x1="55" y1="10" x2="55" y2="165" stroke="#1e2230" stroke-width="0.5" stroke-dasharray="3"/>
+        <line x1="170" y1="10" x2="170" y2="165" stroke="#1e2230" stroke-width="0.5" stroke-dasharray="3"/>
+        <line x1="200" y1="10" x2="200" y2="165" stroke="#1e2230" stroke-width="0.5" stroke-dasharray="3"/>
+        <line x1="305" y1="10" x2="305" y2="165" stroke="#1e2230" stroke-width="0.5" stroke-dasharray="3"/>
+        <line x1="340" y1="10" x2="340" y2="165" stroke="#1e2230" stroke-width="0.5" stroke-dasharray="3"/>
+        <!-- Voltage labels -->
+        <text x="10" y="22" font-family="monospace" font-size="7" fill="#3d4b5c">HIGH</text>
+        <text x="10" y="45" font-family="monospace" font-size="7" fill="#3d4b5c">LOW</text>
+        <text x="10" y="102" font-family="monospace" font-size="7" fill="#3d4b5c">HIGH</text>
+        <text x="10" y="125" font-family="monospace" font-size="7" fill="#3d4b5c">LOW</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- SPEED MODES -->
+<section id="modes">
+  <div class="section-label">Performance</div>
+  <h2>Modes de Vitesse</h2>
+
+  <table class="modes-table reveal">
+    <thead>
+      <tr>
+        <th>Mode</th>
+        <th>Vitesse Max</th>
+        <th>Direction</th>
+        <th>Année</th>
+        <th>Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Mode Standard (Sm)</td>
+        <td>100 kbps</td>
+        <td>Bidirectionnel</td>
+        <td>1982</td>
+        <td><span class="badge badge-std">STANDARD</span></td>
+      </tr>
+      <tr>
+        <td>Mode Rapide (Fm)</td>
+        <td>400 kbps</td>
+        <td>Bidirectionnel</td>
+        <td>1992</td>
+        <td><span class="badge badge-fast">RAPIDE</span></td>
+      </tr>
+      <tr>
+        <td>Mode Rapide+ (Fm+)</td>
+        <td>1 Mbps</td>
+        <td>Bidirectionnel</td>
+        <td>2007</td>
+        <td><span class="badge badge-fast">RAPIDE+</span></td>
+      </tr>
+      <tr>
+        <td>Mode Haute Vitesse (Hs)</td>
+        <td>3,4 Mbps</td>
+        <td>Bidirectionnel</td>
+        <td>1998</td>
+        <td><span class="badge badge-high">HAUTE VITESSE</span></td>
+      </tr>
+      <tr>
+        <td>Mode Ultra-Rapide (UFm)</td>
+        <td>5 Mbps</td>
+        <td>Unidirectionnel uniquement</td>
+        <td>2012</td>
+        <td><span class="badge badge-ultra">ULTRA</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<hr class="divider">
+
+<!-- FRAME FORMAT -->
+<section id="frame">
+  <div class="section-label">Anatomie de la Trame</div>
+  <h2>Bit par Bit</h2>
+  <p style="color:var(--muted); font-size:0.9rem; max-width:560px; line-height:1.7;">Chaque trame de données I²C est soigneusement structurée. Survolez chaque champ pour comprendre son rôle dans le protocole de communication.</p>
+
+  <div class="frame-anatomy reveal">
+    <div class="frame-title">// Trame I²C en écriture (adresse + 1 octet de données)</div>
+    <div class="frame-bits">
+      <div class="frame-bit fb-start">
+        <div class="bit-box">S</div>
+        <div class="bit-label">Début</div>
+      </div>
+      <!-- 7-bit address -->
+      <div class="frame-bit fb-addr"><div class="bit-box">A6</div><div class="bit-label">Adr</div></div>
+      <div class="frame-bit fb-addr"><div class="bit-box">A5</div><div class="bit-label">Adr</div></div>
+      <div class="frame-bit fb-addr"><div class="bit-box">A4</div><div class="bit-label">Adr</div></div>
+      <div class="frame-bit fb-addr"><div class="bit-box">A3</div><div class="bit-label">Adr</div></div>
+      <div class="frame-bit fb-addr"><div class="bit-box">A2</div><div class="bit-label">Adr</div></div>
+      <div class="frame-bit fb-addr"><div class="bit-box">A1</div><div class="bit-label">Adr</div></div>
+      <div class="frame-bit fb-addr"><div class="bit-box">A0</div><div class="bit-label">Adr</div></div>
+      <!-- R/W -->
+      <div class="frame-bit fb-rw"><div class="bit-box">R/W</div><div class="bit-label">R/W</div></div>
+      <!-- ACK -->
+      <div class="frame-bit fb-ack"><div class="bit-box">ACK</div><div class="bit-label">Esclave</div></div>
+      <!-- 8 data bits -->
+      <div class="frame-bit fb-data"><div class="bit-box">D7</div><div class="bit-label">Données</div></div>
+      <div class="frame-bit fb-data"><div class="bit-box">D6</div><div class="bit-label">Données</div></div>
+      <div class="frame-bit fb-data"><div class="bit-box">D5</div><div class="bit-label">Données</div></div>
+      <div class="frame-bit fb-data"><div class="bit-box">D4</div><div class="bit-label">Données</div></div>
+      <div class="frame-bit fb-data"><div class="bit-box">D3</div><div class="bit-label">Données</div></div>
+      <div class="frame-bit fb-data"><div class="bit-box">D2</div><div class="bit-label">Données</div></div>
+      <div class="frame-bit fb-data"><div class="bit-box">D1</div><div class="bit-label">Données</div></div>
+      <div class="frame-bit fb-data"><div class="bit-box">D0</div><div class="bit-label">Données</div></div>
+      <!-- ACK2 -->
+      <div class="frame-bit fb-ack"><div class="bit-box">ACK</div><div class="bit-label">Esclave</div></div>
+      <!-- STOP -->
+      <div class="frame-bit fb-stop"><div class="bit-box">P</div><div class="bit-label">Fin</div></div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- APPLICATIONS -->
+<section id="apps">
+  <div class="section-label">Monde Réel</div>
+  <h2>Où Vit l'I²C</h2>
+
+  <div class="apps-grid reveal">
+    <div class="app-card">
+      <div class="app-icon">🌡️</div>
+      <div class="app-name">Capteurs</div>
+      <div class="app-desc">Capteurs de température, humidité, pression et mouvement comme le BME280, MPU-6050 et AHT20.</div>
+    </div>
+    <div class="app-card">
+      <div class="app-icon">🖥️</div>
+      <div class="app-name">Écrans OLED</div>
+      <div class="app-desc">Écrans OLED 128×64 basés sur le SSD1306, très répandus dans les projets embarqués.</div>
+    </div>
+    <div class="app-card">
+      <div class="app-icon">🔋</div>
+      <div class="app-name">Gestion de Batterie</div>
+      <div class="app-desc">Des CI comme le BQ27441 fournissent la jauge de carburant et la gestion de l'énergie via I²C.</div>
+    </div>
+    <div class="app-card">
+      <div class="app-icon">🎛️</div>
+      <div class="app-name">Expandeurs GPIO</div>
+      <div class="app-desc">Le MCP23017 ajoute 16 broches E/S supplémentaires à un microcontrôleur via deux simples fils.</div>
+    </div>
+    <div class="app-card">
+      <div class="app-icon">💾</div>
+      <div class="app-name">Mémoire EEPROM</div>
+      <div class="app-desc">Les EEPROM de la série AT24C stockent la configuration et les données persistantes via I²C.</div>
+    </div>
+    <div class="app-card">
+      <div class="app-icon">🕐</div>
+      <div class="app-name">Horloges Temps Réel</div>
+      <div class="app-desc">Les RTC DS3231 et PCF8563 maintiennent une heure précise avec une simple connexion I²C.</div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- CODE EXAMPLE -->
+<section id="code">
+  <div class="section-label">Implémentation</div>
+  <h2>Exemple Arduino</h2>
+  <p style="color:var(--muted); font-size:0.9rem; max-width:520px; line-height:1.7; margin-bottom:1rem;">Lecture de la température depuis un capteur AHT20 avec la bibliothèque Wire sur Arduino — une transaction I²C typique en pratique.</p>
+
+  <div class="code-wrap reveal">
+    <div class="code-header">
+      <span class="dot dot-r"></span>
+      <span class="dot dot-y"></span>
+      <span class="dot dot-g"></span>
+      <span class="code-lang">C++ · Arduino</span>
+    </div>
+    <pre><code><span class="c-cm">// Lecture Température I²C — Capteur AHT20</span>
+<span class="c-kw">#include</span> <span class="c-str">&lt;Wire.h&gt;</span>
+
+<span class="c-kw">#define</span> <span class="c-num">AHT20_ADDR</span>  <span class="c-num">0x38</span>  <span class="c-cm">// Adresse I²C 7 bits</span>
+<span class="c-kw">#define</span> <span class="c-num">CMD_TRIGGER</span> <span class="c-num">0xAC</span>  <span class="c-cm">// Déclencher la mesure</span>
+
+<span class="c-type">void</span> <span class="c-fn">setup</span>() {
+  Wire.<span class="c-fn">begin</span>();          <span class="c-cm">// Initialiser I²C en mode maître</span>
+  Serial.<span class="c-fn">begin</span>(<span class="c-num">115200</span>);
+}
+
+<span class="c-type">float</span> <span class="c-fn">lireTemperature</span>() {
+  <span class="c-cm">// Envoyer la commande de déclenchement à l'AHT20</span>
+  Wire.<span class="c-fn">beginTransmission</span>(<span class="c-num">AHT20_ADDR</span>);
+  Wire.<span class="c-fn">write</span>(<span class="c-num">CMD_TRIGGER</span>);
+  Wire.<span class="c-fn">write</span>(<span class="c-num">0x33</span>); Wire.<span class="c-fn">write</span>(<span class="c-num">0x00</span>);
+  Wire.<span class="c-fn">endTransmission</span>();
+
+  <span class="c-fn">delay</span>(<span class="c-num">80</span>);  <span class="c-cm">// Attendre la fin de la mesure</span>
+
+  <span class="c-cm">// Demander 6 octets au capteur</span>
+  Wire.<span class="c-fn">requestFrom</span>(<span class="c-num">AHT20_ADDR</span>, (<span class="c-type">uint8_t</span>)<span class="c-num">6</span>);
+  <span class="c-type">uint8_t</span> data[<span class="c-num">6</span>];
+  <span class="c-kw">for</span> (<span class="c-type">int</span> i = <span class="c-num">0</span>; i &lt; <span class="c-num">6</span>; i++) data[i] = Wire.<span class="c-fn">read</span>();
+
+  <span class="c-cm">// Extraire la température brute sur 20 bits</span>
+  <span class="c-type">uint32_t</span> tempBrut = (((<span class="c-type">uint32_t</span>)data[<span class="c-num">3</span>] &amp; <span class="c-num">0x0F</span>) &lt;&lt; <span class="c-num">16</span>)
+                    | ((<span class="c-type">uint32_t</span>)data[<span class="c-num">4</span>] &lt;&lt; <span class="c-num">8</span>)
+                    | data[<span class="c-num">5</span>];
+
+  <span class="c-kw">return</span> ((<span class="c-type">float</span>)tempBrut / <span class="c-num">1048576.0f</span>) * <span class="c-num">200.0f</span> - <span class="c-num">50.0f</span>;
+}
+
+<span class="c-type">void</span> <span class="c-fn">loop</span>() {
+  <span class="c-type">float</span> temp = <span class="c-fn">lireTemperature</span>();
+  Serial.<span class="c-fn">print</span>(<span class="c-str">"Température : "</span>);
+  Serial.<span class="c-fn">print</span>(temp, <span class="c-num">2</span>);
+  Serial.<span class="c-fn">println</span>(<span class="c-str">" °C"</span>);
+  <span class="c-fn">delay</span>(<span class="c-num">2000</span>);
+}</code></pre>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-brand">I²C</div>
+  <div class="footer-note">Circuit Inter-Intégré · Philips Semiconductors 1982 · NXP 2006 → aujourd'hui</div>
+</footer>
+
+<script>
+  // Custom cursor
+  const cursor = document.getElementById('cursor');
+  const ring = document.getElementById('cursorRing');
+  let mx = 0, my = 0, rx = 0, ry = 0;
+
+  document.addEventListener('mousemove', e => {
+    mx = e.clientX; my = e.clientY;
+    cursor.style.left = mx + 'px';
+    cursor.style.top = my + 'px';
+  });
+
+  function animateRing() {
+    rx += (mx - rx) * 0.12;
+    ry += (my - ry) * 0.12;
+    ring.style.left = rx + 'px';
+    ring.style.top = ry + 'px';
+    requestAnimationFrame(animateRing);
+  }
+  animateRing();
+
+  // Scroll reveal
+  const reveals = document.querySelectorAll('.reveal');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.15 });
+  reveals.forEach(el => observer.observe(el));
+
+  // Smooth scroll
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      document.querySelector(a.getAttribute('href'))?.scrollIntoView({ behavior: 'smooth' });
+    });
+  });
+</script>
+</body>
+</html>
